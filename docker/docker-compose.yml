@@ -1,0 +1,92 @@
+version: "3.8"
+
+networks:
+  api:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+services:
+  # ====================================  state full =============================================
+  postgres:
+    image: postgres:13.1-alpine
+    networks:
+      - api
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - docker/.envs
+    command:
+      - "postgres"
+    logging:
+      driver: "local"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    deploy:
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.labels.main == 1
+  # =======================================   SERVERS   ===================================
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    image: api
+    command:
+      - /bin/bash
+      - -c
+      - |
+        while !</dev/tcp/$POSTGRES_HOST/$POSTGRES_PORT; do echo "waiting for postgres"; echo $POSTGRES_HOST; sleep 1; done;
+        python manage.py migrate --no-input
+        python manage.py collectstatic --no-input
+        uvicorn api.asgi:application --host 0.0.0.0 --port 8000 --reload --workers 5
+    networks:
+      api:
+        aliases:
+          - api.api-yar.svc
+    volumes:
+      - ./:/api
+    env_file:
+      - docker/.envs
+    depends_on:
+      - postgres
+    logging:
+      driver: "local"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    deploy:
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.labels.main == 1
+      replicas: 1
+  nginx:
+    build:
+      context: ./docker/nginx/
+    image: nginx
+    networks:
+      - api
+    ports:
+      - 80:80
+    depends_on:
+      - app
+    logging:
+      driver: "local"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    deploy:
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.labels.main == 1
+      replicas: 1
