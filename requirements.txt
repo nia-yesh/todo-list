@@ -1,0 +1,7 @@
+django~=3.2
+djangorestframework~=3.11.0
+psycopg2-binary~=2.8
+uvicorn~=0.13
+djangorestframework_simplejwt~=4.4
+django-filter~=2.4.0
+django-cors-headers~=3.7.0
